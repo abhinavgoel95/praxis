@@ -1007,9 +1007,9 @@ class DotProductAttention(base_layer.BaseLayer):
   decode_cache: bool = True
   attention_mask_summary: bool = False
   zero_fully_masked: bool = False
-  qk_einsum_tpl: LayerTpl = template_field(base_ops.Einsum)
-  pv_einsum_tpl: LayerTpl = template_field(base_ops.Einsum)
   mha_mask_addition_pattern: bool = True
+  qk_einsum_tpl: LayerTpl = template_field(base_ops.EinsumOp)
+  pv_einsum_tpl: LayerTpl = template_field(base_ops.EinsumOp)
 
   # SPMD partition related params.
   #
