@@ -1653,6 +1653,7 @@ class DotProductAttention(base_layer.BaseLayer):
       atten_mask: JTensor,
       query_segment_pos: JTensor | None = None,
       key_segment_pos: JTensor | None = None,
+      layer_num: int = 0
   ) -> tuple[JTensor, JTensor]:
     """Computes the value vector given the current query output.
 
@@ -1741,7 +1742,10 @@ class DotProductAttention(base_layer.BaseLayer):
     # Post projection
     encoded = self.post(encoded)
     encoded = self._shard_bld(encoded)
-    encoded = checkpoint_name(encoded, 'out_proj')
+    if layer_num % 2 == 0: 
+      #Example of how to choose how frequently you would want to checkpoint this activation
+      #This can be replicated for all the different activations that are being checkpointed.
+      encoded = checkpoint_name(encoded, 'out_proj')
 
     return encoded, atten_probs
 
