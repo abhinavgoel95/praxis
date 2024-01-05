@@ -1307,6 +1307,7 @@ class Transformer(base_layer.BaseLayer):
       cross_attention_mask: JTensor | None = None,
       segment_pos: JTensor | None = None,
       segment_ids: JTensor | None = None,
+      layer_num: int = 0
   ) -> tuple[JTensor, JTensor]:
     """Transformer decoder layer.
 
@@ -1355,6 +1356,7 @@ class Transformer(base_layer.BaseLayer):
         atten_mask=attention_mask,
         query_segment_pos=segment_pos,
         key_segment_pos=segment_pos,
+        layer_num=layer_num
     )
     atten_probs = NestedMap(self_atten=self_atten_probs)
 
@@ -1787,6 +1789,7 @@ class StackedTransformer(base_layer.BaseLayer):
         cross_inputs,
         cross_attention_mask,
         segment_pos,
+        layer_num: int = 0
     ):
       x_out, _ = transformer(
           x_in,
@@ -1795,6 +1798,7 @@ class StackedTransformer(base_layer.BaseLayer):
           cross_inputs,
           cross_attention_mask,
           segment_pos=segment_pos,
+          layer_num=layer_num
       )
       return x_out
 
@@ -1814,6 +1818,7 @@ class StackedTransformer(base_layer.BaseLayer):
           cross_inputs,
           cross_attention_mask,
           segment_pos,
+          layer_num=i
       )
       x_out = checkpoint_name(x_out, 'transformer_layer_out')
     return x_out
