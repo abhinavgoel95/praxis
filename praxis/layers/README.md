@@ -4,8 +4,8 @@ The changes to `attentions.py` in this branch showcases an example on how to use
 The TE [self_fused_attn](https://github.com/NVIDIA/TransformerEngine/blob/main/transformer_engine/jax/fused_attn.py#L53) API expects a concatenated QKV vector of shape `(b, s, 3, h, d)` where `b` is batch size, `s` is seq len, `h` is #heads, and `d` is head_dim.
 The following snippet shows how to concatenate the Q, K, and V tensors.
 ```
-b, s_q, h, d = q.shape
-_, s_kv, _, _ = k.shape
+b, s_q, h, d = query_proj.shape
+_, s_kv, _, _ = key_proj.shape
 
 q = jnp.reshape(query_proj, (*query_proj.shape[:2], 1, *query_proj.shape[-2:]))
 k = jnp.reshape(key_proj, (*query_proj.shape[:2], 1, *query_proj.shape[-2:]))
