@@ -1721,8 +1721,8 @@ class DotProductAttention(base_layer.BaseLayer):
 
     import transformer_engine.jax.fused_attn as fused_attn
 
-    b, s_q, h, d = q.shape
-    _, s_kv, _, _ = k.shape
+    b, s_q, h, d = query_proj.shape
+    _, s_kv, _, _ = key_proj.shape
 
     q = jnp.reshape(query_proj, (*query_proj.shape[:2], 1, *query_proj.shape[-2:]))
     k = jnp.reshape(key_proj, (*query_proj.shape[:2], 1, *query_proj.shape[-2:]))
