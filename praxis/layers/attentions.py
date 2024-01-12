@@ -1724,9 +1724,9 @@ class DotProductAttention(base_layer.BaseLayer):
     b, s_q, h, d = q.shape
     _, s_kv, _, _ = k.shape
 
-    q = jnp.reshape(q, (*q.shape[:2], 1, *q.shape[-2:]))
-    k = jnp.reshape(k, (*q.shape[:2], 1, *q.shape[-2:]))
-    v = jnp.reshape(v, (*q.shape[:2], 1, *q.shape[-2:]))
+    q = jnp.reshape(query_proj, (*query_proj.shape[:2], 1, *query_proj.shape[-2:]))
+    k = jnp.reshape(key_proj, (*query_proj.shape[:2], 1, *query_proj.shape[-2:]))
+    v = jnp.reshape(value_proj, (*query_proj.shape[:2], 1, *query_proj.shape[-2:]))
     qkv = jnp.concatenate((q, k, v), axis=2) # to make it (b, s, 3, h, d)
 
     encoded = fused_attn.self_fused_attn(
