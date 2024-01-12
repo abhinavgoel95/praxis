@@ -1719,9 +1719,28 @@ class DotProductAttention(base_layer.BaseLayer):
       query_proj = self.layer_norm_q(query_proj)
       key_proj = self.layer_norm_k(key_proj)
 
-    encoded, atten_probs = self._dot_atten(
-        query_proj, key_proj, value_proj, atten_mask, relative_bias
-    )
+    import transformer_engine.jax.fused_attn as fused_attn
+
+    b, s_q, h, d = q.shape
+    _, s_kv, _, _ = k.shape
+
+    q = jnp.reshape(q, (*q.shape[:2], 1, *q.shape[-2:]))
+    k = jnp.reshape(k, (*q.shape[:2], 1, *q.shape[-2:]))
+    v = jnp.reshape(v, (*q.shape[:2], 1, *q.shape[-2:]))
+    qkv = jnp.concatenate((q, k, v), axis=2) # to make it (b, s, 3, h, d)
+
+    encoded = fused_attn.self_fused_attn(
+        qkv=qkv,
+        bias=None,
+        mask=jnp.zeros((b, 1, s_q, s_kv)),  # no padding
+        seed=None,
+        attn_bias_type=fused_attn.AttnBiasType.NO_BIAS,
+        attn_mask_type=fused_attn.AttnMaskType.CAUSAL_MASK,
+        scaling_factor=1.0/math.sqrt(h),
+        dropout_probability=0.,
+        is_training=True)
+    
+    atten_probs = None
 
     # Apply NGrammer to the output of the attention layer.
     # Paper: https://openreview.net/forum?id=GxjCYmQAody.
