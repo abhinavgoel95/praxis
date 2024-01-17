@@ -334,7 +334,7 @@ class TransformerLm(base_layer.BaseLayer):
     )
 
     if seq_axis is None:
-      w_data_axes = data_axis
+      w_data_axes = (data_axis, data_expert_axis)
     else:
       w_data_axes = (data_axis, data_expert_axis, seq_axis)
 
