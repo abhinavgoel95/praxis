@@ -283,6 +283,7 @@ class TransformerLm(base_layer.BaseLayer):
       *,
       replica_axis,
       data_axis,
+      data_expert_axis,
       mdl_axis,
       ici_mesh_shape,
       dcn_mesh_shape=None,
@@ -297,6 +298,7 @@ class TransformerLm(base_layer.BaseLayer):
       lm_p: A params of this class.
       replica_axis: A string or int of the model replica axis name.
       data_axis: A string or int of the data axis name.
+      data_expert_axis: A string or int of the data/expert axis name
       mdl_axis: A string or int of the mdl axis name.
       ici_mesh_shape: Shape of logical mesh for a slice.
       dcn_mesh_shape: Shape of logical mesh between slices.
@@ -319,14 +321,14 @@ class TransformerLm(base_layer.BaseLayer):
     # of (replica_axis, data_axis).
 
     if batch_axes is None:
-      batch_axes = (replica_axis, data_axis)
+      batch_axes = (replica_axis, data_axis, data_expert_axis)
     bld = (
         [batch_axes, seq_axis, mdl_axis]
         if training_optimized
         else [batch_axes, None, None]
     )
     egcm = (
-        [data_axis, None, None, mdl_axis]
+        [data_expert_axis, None, None, mdl_axis]
         if training_optimized
         else [batch_axes, None, None, None]
     )
@@ -334,7 +336,7 @@ class TransformerLm(base_layer.BaseLayer):
     if seq_axis is None:
       w_data_axes = data_axis
     else:
-      w_data_axes = (data_axis, seq_axis)
+      w_data_axes = (data_axis, data_expert_axis, seq_axis)
 
     # w_df: sharding for weight of ffn0, shape (d, f). ff1 weights will be
     # inferred from it.
@@ -344,7 +346,7 @@ class TransformerLm(base_layer.BaseLayer):
     w_dnh = [w_data_axes, mdl_axis, None]
     # w_emh: sharding for first MoE FFN weight, shape (e, m, h). The second MoE
     # ffn weight will be inferred from it.
-    w_emh = [data_axis, None, mdl_axis]
+    w_emh = [data_expert_axis, data_axis, mdl_axis]
     # w_vd: sharding of the embedding weight of (vocab_size, d).
     w_vd = [mdl_axis, w_data_axes]
     # a_bld: sharding of output of ffn/attention, shape (b, l, d).
@@ -357,7 +359,7 @@ class TransformerLm(base_layer.BaseLayer):
     # a_blv: sharding of the logits activation of shape (b, l, vocab_size).
     a_blv = [batch_axes, seq_axis, mdl_axis]
     # a_egch: sharding of the output of first MoE FFN, shape (e, g, c, h).
-    a_egch = [data_axis, None, None, mdl_axis]
+    a_egch = [data_expert_axis, None, None, mdl_axis]
     # a_egcm: sharding of the output of second MoE FFN, shape (e, g, c, m).
     a_egcm = egcm
     return cls.set_custom_sharding_params(
