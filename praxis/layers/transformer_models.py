@@ -319,7 +319,6 @@ class TransformerLm(base_layer.BaseLayer):
     #
     # The batch axis of the activations are always sharded over the combination
     # of (replica_axis, data_axis).
-
     if batch_axes is None:
       batch_axes = (replica_axis, data_axis, data_expert_axis)
     bld = (
@@ -328,7 +327,7 @@ class TransformerLm(base_layer.BaseLayer):
         else [batch_axes, None, None]
     )
     egcm = (
-        [data_expert_axis, None, None, mdl_axis]
+        [(data_axis, data_expert_axis), None, None, mdl_axis]
         if training_optimized
         else [batch_axes, None, None, None]
     )
@@ -359,7 +358,7 @@ class TransformerLm(base_layer.BaseLayer):
     # a_blv: sharding of the logits activation of shape (b, l, vocab_size).
     a_blv = [batch_axes, seq_axis, mdl_axis]
     # a_egch: sharding of the output of first MoE FFN, shape (e, g, c, h).
-    a_egch = [data_expert_axis, None, None, mdl_axis]
+    a_egch = [(data_axis, data_expert_axis), None, None, mdl_axis]
     # a_egcm: sharding of the output of second MoE FFN, shape (e, g, c, m).
     a_egcm = egcm
     return cls.set_custom_sharding_params(
