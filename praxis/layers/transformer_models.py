@@ -188,7 +188,7 @@ def _set_stacked_transformer_sharding(
     w_h_sharding = None if w_emh is None else w_emh[2]
     moe_wp.ehm = [w_e_sharding, w_h_sharding, w_m_sharding]
     # Activations
-    a_e_sharding = None if a_egch is None else a_egch[0]
+    a_e_sharding = None if a_egch is None else ('data', 'data_expert')
     moe_ap = moe_p.activation_split_dims_mapping
     moe_ap.gs = [a_e_sharding, None]
     # dispatch and combine tensors
@@ -196,11 +196,11 @@ def _set_stacked_transformer_sharding(
     moe_ap.gecs = [a_e_sharding, None, None, None]
     moe_ap.gec = [a_e_sharding, None, None]
     moe_ap.egch = a_egch
-    a_e_sharding = None if a_egcm is None else a_egcm[0]
+    a_e_sharding = None if a_egcm is None else ('data', 'data_expert')
     a_m_sharding = None if a_egcm is None else a_egcm[3]
     moe_ap.gsm = [a_e_sharding, None, a_m_sharding]
     moe_ap.egcm = a_egcm
-    moe_ap.gecm = a_egcm
+    moe_ap.gecm = [a_egcm[1], a_egcm[0], a_egcm[2], a_egcm[3]]
   return stacked_transformer_p
 
 
@@ -327,7 +327,7 @@ class TransformerLm(base_layer.BaseLayer):
         else [batch_axes, None, None]
     )
     egcm = (
-        [(data_axis, data_expert_axis), None, None, mdl_axis]
+        [data_expert_axis, data_axis, None, mdl_axis]
         if training_optimized
         else [batch_axes, None, None, None]
     )
@@ -358,7 +358,7 @@ class TransformerLm(base_layer.BaseLayer):
     # a_blv: sharding of the logits activation of shape (b, l, vocab_size).
     a_blv = [batch_axes, seq_axis, mdl_axis]
     # a_egch: sharding of the output of first MoE FFN, shape (e, g, c, h).
-    a_egch = [(data_axis, data_expert_axis), None, None, mdl_axis]
+    a_egch = [data_expert_axis, data_axis, None, mdl_axis]
     # a_egcm: sharding of the output of second MoE FFN, shape (e, g, c, m).
     a_egcm = egcm
     return cls.set_custom_sharding_params(
