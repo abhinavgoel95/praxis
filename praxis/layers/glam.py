@@ -24,6 +24,7 @@ from praxis.layers import embedding_softmax
 from praxis.layers import normalizations
 from praxis.layers import transformer_models
 from praxis.layers import transformers
+from praxis.layers.injection import fp8_nvidia_gpu as fp8_ops
 
 LanguageModelType = transformer_models.LanguageModelType
 
@@ -54,6 +55,7 @@ def GlamStackedTransformerHParams(
     e_dim=None,
     combine_qkv=False,
     bidirectional=False,
+    use_fp8=False,
 ) -> pax_fiddle.Config[transformers.StackedTransformer]:
   """Common setup for GLaM Transformer layers.
 
@@ -177,6 +179,19 @@ def GlamStackedTransformerHParams(
   moe_p.moe_load_balance_loss_weight = moe_load_balance_loss_weight
   moe_p.gating_func = moe_gating_func
   moe_p.moe_gating_embedding_level = moe_gating_embedding_level
+  if use_fp8:
+    p.transformer_layer_params_tpl.tr_atten_tpl.proj_tpl.einsum_tpl = pax_fiddle.Config(
+        fp8_ops.Fp8EinsumOp
+    )
+    p.transformer_layer_params_tpl.tr_atten_tpl.combined_qkv_proj_tpl.einsum_tpl = (
+        pax_fiddle.Config(fp8_ops.Fp8EinsumOp)
+    )
+    p.transformer_layer_params_tpl.tr_fflayer_tpl.fflayer_tpl.linear_tpl.einsum_tpl = (
+        pax_fiddle.Config(fp8_ops.Fp8EinsumOp)
+    )
+    p.moe_layer_tpl.einsum_tpl = (
+        pax_fiddle.Config(fp8_ops.Fp8EinsumOp)
+    )
   return p
 
 
@@ -212,6 +227,7 @@ def GlamUniTransformerLmHParams(
     num_pipeline_microbatches=1,
     model_type=LanguageModelType.CAUSAL,
     checkpoint_policy=checkpoint_policy.AutodiffCheckpointType.SAVE_NOTHING,
+    use_fp8=False,
 ) -> pax_fiddle.Config[transformer_models.TransformerLm]:
   """Common setup for GLaM Decoder-only Transformer Model.
 
@@ -317,6 +333,7 @@ def GlamUniTransformerLmHParams(
       combine_qkv=combine_qkv,
       bidirectional=bidirectional,
       moe_gating_embedding_level=moe_gating_embedding_level,
+      use_fp8=use_fp8,
   )
 
   num_blocks = num_transformer_layers // 2 if moe else num_transformer_layers
