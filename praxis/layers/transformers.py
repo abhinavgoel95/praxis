@@ -26,6 +26,7 @@ from jax import numpy as jnp
 from jax.ad_checkpoint import checkpoint_name
 import numpy as np
 from praxis import base_layer
+from praxis.layers import base_ops
 from praxis import gshard_utils
 from praxis import pax_fiddle
 from praxis import py_utils
@@ -660,6 +661,7 @@ class TransformerFeedForwardMoe(base_layer.BaseLayer):
   gating_logit_cap: float = 0.0
   moe_gating_embedding_level: str = 'token'
   use_gated_activation: bool = False
+  einsum_tpl: LayerTpl = template_field(base_ops.EinsumOp)Ω
 
   # SPMD partition related params.
   # M - model_dim, for both inputs and outputs
@@ -823,6 +825,7 @@ class TransformerFeedForwardMoe(base_layer.BaseLayer):
     )
     logging.debug('moe wo WeightHParams %s', wo_pc)
     self.create_variable('wo_0', wo_pc)
+    self.create_child('einsum', self.einsum_tpl.clone())
 
   def _split(self, t_in, sharding):
     return base_layer.maybe_shard(t_in, sharding, self.mesh_axis_names)
