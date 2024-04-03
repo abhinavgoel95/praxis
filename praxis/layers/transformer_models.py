@@ -126,7 +126,7 @@ def _set_embedding_softmax_sharding_params_for_transformers(
   return embedding_softmax_p
 
 
-def _set_stacked_transformer_sharding(
+def _set_stacked_transformer_sharding_v2(
     stacked_transformer_p,
     *,
     w_df,
@@ -216,6 +216,98 @@ def _set_stacked_transformer_sharding(
     moe_ap.gsm = [a_e_sharding, None, a_m_sharding]
     moe_ap.egcm = a_egcm
     moe_ap.gecm = [a_egcm[1], a_egcm[0], a_egcm[2], a_egcm[3]]
+  return stacked_transformer_p
+
+def _set_stacked_transformer_sharding(
+    stacked_transformer_p,
+    *,
+    w_df,
+    w_dnh,
+    w_emh,
+    a_bld,
+    a_blf,
+    a_blnh,
+    a_egch,
+    a_egcm,
+    a_blh=None,
+    a_bd=None,
+    a_bf=None,
+):
+  """Set sharding params for the stacked transformer layer."""
+  stacked_p = stacked_transformer_p
+  if fdl.get_callable(stacked_p) == transformers.PipelinedTransformer:
+    stacked_p = stacked_p.pipeline_stage
+  if issubclass(
+      fdl.get_callable(stacked_p), transformers.StackedTransformerRepeated
+  ):
+    stacked_p = stacked_p.block
+  transformer_p = stacked_p.transformer_layer_params_tpl
+  if isinstance(transformer_p, Sequence):
+    transformer_p_lst = transformer_p
+  else:
+    transformer_p_lst = [transformer_p]
+  for t_p in transformer_p_lst:
+    for atten_p in (t_p.tr_atten_tpl, t_p.cross_atten_tpl):
+      if atten_p is None:
+        continue
+      atten_wp = atten_p.weight_split_dims_mapping
+      atten_wp.proj = w_dnh
+      w_n_sharding = None if w_dnh is None else w_dnh[1]
+      atten_wp.dconv = [w_n_sharding, None]
+      atten_ap = atten_p.activation_split_dims_mapping
+      atten_ap.blnh = a_blnh
+      atten_ap.bld = a_bld
+      if hasattr(atten_ap, 'bd'):
+        atten_ap.bd = a_bd
+      if issubclass(
+          fdl.get_callable(atten_p),
+          multi_query_attention.MultiQueryDotProductAttention,
+      ):
+        atten_wp.proj_headless = [w_dnh[0], w_dnh[2]]
+        if a_blh is None:
+          atten_ap.blh = [a_blnh[0], a_blnh[1], a_blnh[3]]
+        else:
+          atten_ap.blh = a_blh
+
+    ff_p = t_p.tr_fflayer_tpl
+    ff_wp = ff_p.weight_split_dims_mapping
+    ff_wp.ffn0 = w_df
+    if w_df is None:
+      ff_wp.ffn1 = None
+    else:
+      ff_wp.ffn1 = [w_df[1], w_df[0]]
+    ff_ap = ff_p.activation_split_dims_mapping
+    ff_ap.ffn0 = a_blf
+    if hasattr(ff_ap, 'ffn0_extend_step'):
+      ff_ap.ffn0_extend_step = a_bf
+    ff_ap.ffn1 = a_bld
+    if hasattr(ff_ap, 'ffn1_extend_step'):
+      ff_ap.ffn1_extend_step = a_bd
+
+  if stacked_p.moe_layer_tpl is not None:
+    # Set Moe layer sharding hparams.
+    moe_p = stacked_p.moe_layer_tpl
+    moe_wp = moe_p.weight_split_dims_mapping
+    moe_wp.me = [None, None]  # Replicated.
+    moe_wp.emh = w_emh
+    w_e_sharding = None if w_emh is None else w_emh[0]
+    w_m_sharding = None if w_emh is None else w_emh[1]
+    w_h_sharding = None if w_emh is None else w_emh[2]
+    moe_wp.ehm = [w_e_sharding, w_h_sharding, w_m_sharding]
+    # Activations
+    a_e_sharding = None if a_egch is None else a_egch[0]
+    moe_ap = moe_p.activation_split_dims_mapping
+    moe_ap.gs = [a_e_sharding, None]
+    # dispatch and combine tensors
+    moe_ap.gsec = [a_e_sharding, None, None, None]
+    moe_ap.gecs = [a_e_sharding, None, None, None]
+    moe_ap.gec = [a_e_sharding, None, None]
+    moe_ap.egch = a_egch
+    a_e_sharding = None if a_egcm is None else a_egcm[0]
+    a_m_sharding = None if a_egcm is None else a_egcm[3]
+    moe_ap.gsm = [a_e_sharding, None, a_m_sharding]
+    moe_ap.egcm = a_egcm
+    moe_ap.gecm = a_egcm
   return stacked_transformer_p
 
 
@@ -551,6 +643,7 @@ class TransformerLm(base_layer.BaseLayer):
     lm_p.ici_mesh_shape = ici_mesh_shape
     lm_p.dcn_mesh_shape = dcn_mesh_shape
     lm_p.mesh_axis_names = mesh_axis_names
+    use_expert_parallem = True if 'data_expert' in lm_p.mesh_axis_names else False
     pos_emb_w_ld = w_df
     if (
         lm_p.position_emb_tpl is not None
@@ -579,7 +672,22 @@ class TransformerLm(base_layer.BaseLayer):
         **mesh_kwargs,
     )
 
-    def _set_transformer_sharding(transformer_tpl):
+    def _set_transformer_sharding(transformer_tpl, use_expert_parallem=False):
+      if use_expert_parallem:
+        return _set_stacked_transformer_sharding_v2(
+          transformer_tpl,
+          w_df=w_df,
+          w_dnh=w_dnh,
+          w_emh=w_emh,
+          a_bld=a_bld,
+          a_blf=a_blf,
+          a_blh=a_blh,
+          a_blnh=a_blnh,
+          a_bd=a_bd,
+          a_bf=a_bf,
+          a_egch=a_egch,
+          a_egcm=a_egcm,
+      )  
       return _set_stacked_transformer_sharding(
           transformer_tpl,
           w_df=w_df,
@@ -597,11 +705,11 @@ class TransformerLm(base_layer.BaseLayer):
 
     if lm_p.stacked_transformer_tpl.cls == transformers.PipelinedTransformer:
       lm_p.stacked_transformer_tpl.pipeline_stage = _set_transformer_sharding(
-          lm_p.stacked_transformer_tpl.pipeline_stage
+          lm_p.stacked_transformer_tpl.pipeline_stage, use_expert_parallem
       )
     else:
       lm_p.stacked_transformer_tpl = _set_transformer_sharding(
-          lm_p.stacked_transformer_tpl
+          lm_p.stacked_transformer_tpl, use_expert_parallem
       )
 
     if lm_p.separate_embedding_tpl is not None:
